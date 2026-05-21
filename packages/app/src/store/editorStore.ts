@@ -1,9 +1,30 @@
 import { create } from 'zustand';
 import type { Breakpoint, GridItem, Layout, Page, Widget, WidgetType } from '../types';
 import { deleteLayout, loadLayouts, saveLayout } from '../db/storage';
+import { oscClient } from '../osc/client';
 import { createLayout, createWidget, gridSizeFor, placeItem, uid } from './factory';
 
 type Mode = 'edit' | 'run';
+
+// Debounced push of a layout to the bridge for cross-device sync.
+const pushTimers = new Map<string, ReturnType<typeof setTimeout>>();
+function pushToBridge(layout: Layout): void {
+  const existing = pushTimers.get(layout.id);
+  if (existing) clearTimeout(existing);
+  pushTimers.set(
+    layout.id,
+    setTimeout(() => {
+      pushTimers.delete(layout.id);
+      oscClient.sendMessage({ type: 'layouts:save', layout });
+    }, 150)
+  );
+}
+
+// Save locally (offline cache) and sync to the bridge.
+function persistLayout(layout: Layout): void {
+  void saveLayout(layout);
+  pushToBridge(layout);
+}
 
 interface EditorState {
   ready: boolean;
@@ -33,10 +54,15 @@ interface EditorState {
   select: (id: string | null) => void;
 
   applyGridChange: (bp: Breakpoint, items: GridItem[]) => void;
+
+  // Apply state pushed from the bridge (no re-broadcast).
+  applyRemoteSnapshot: (layouts: Layout[]) => void;
+  applyRemoteLayout: (layout: Layout) => void;
+  removeRemoteLayout: (id: string) => void;
 }
 
 function persist(layout: Layout | undefined): void {
-  if (layout) void saveLayout(layout);
+  if (layout) persistLayout(layout);
 }
 
 export const useEditorStore = create<EditorState>((set, get) => {
@@ -98,7 +124,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
 
     newLayout: () => {
       const layout = createLayout(`Layout ${get().layouts.length + 1}`);
-      void saveLayout(layout);
+      persistLayout(layout);
       set({
         layouts: [...get().layouts, layout],
         currentLayoutId: layout.id,
@@ -123,9 +149,10 @@ export const useEditorStore = create<EditorState>((set, get) => {
       const id = get().currentLayoutId;
       if (!id) return;
       void deleteLayout(id);
+      oscClient.sendMessage({ type: 'layouts:delete', id });
       const remaining = get().layouts.filter((l) => l.id !== id);
       const next = remaining[0] ?? createLayout('My First Layout');
-      if (remaining.length === 0) void saveLayout(next);
+      if (remaining.length === 0) persistLayout(next);
       set({
         layouts: remaining.length ? remaining : [next],
         currentLayoutId: next.id,
@@ -137,7 +164,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
     importLayout: (layout) => {
       // Give imported layout a fresh id to avoid clobbering.
       const copy: Layout = { ...layout, id: uid('l') };
-      void saveLayout(copy);
+      persistLayout(copy);
       set({
         layouts: [...get().layouts, copy],
         currentLayoutId: copy.id,
@@ -209,5 +236,69 @@ export const useEditorStore = create<EditorState>((set, get) => {
         ...p,
         layouts: { ...p.layouts, [bp]: items },
       })),
+
+    applyRemoteSnapshot: (remote) => {
+      if (remote.length === 0) {
+        // Bridge has nothing yet — seed it with our local layouts.
+        get().layouts.forEach((l) => oscClient.sendMessage({ type: 'layouts:save', layout: l }));
+        return;
+      }
+      const merged = new Map(get().layouts.map((l) => [l.id, l] as const));
+      const remoteIds = new Set(remote.map((l) => l.id));
+      remote.forEach((l) => merged.set(l.id, l)); // bridge wins on conflicts
+      const list = [...merged.values()];
+      // Push any local-only layouts up so other devices get them too.
+      list.forEach((l) => {
+        if (!remoteIds.has(l.id)) oscClient.sendMessage({ type: 'layouts:save', layout: l });
+        void saveLayout(l);
+      });
+      const currentId =
+        get().currentLayoutId && merged.has(get().currentLayoutId!)
+          ? get().currentLayoutId!
+          : list[0].id;
+      const cur = merged.get(currentId)!;
+      const pageId =
+        cur.pages.find((p) => p.id === get().currentPageId)?.id ?? cur.pages[0]?.id ?? null;
+      set({ layouts: list, currentLayoutId: currentId, currentPageId: pageId });
+    },
+
+    applyRemoteLayout: (layout) => {
+      void saveLayout(layout);
+      const exists = get().layouts.some((l) => l.id === layout.id);
+      const layouts = exists
+        ? get().layouts.map((l) => (l.id === layout.id ? layout : l))
+        : [...get().layouts, layout];
+      const patch: Partial<EditorState> = { layouts };
+      if (get().currentLayoutId === layout.id) {
+        const stillThere = layout.pages.some((p) => p.id === get().currentPageId);
+        if (!stillThere) patch.currentPageId = layout.pages[0]?.id ?? null;
+      }
+      set(patch);
+    },
+
+    removeRemoteLayout: (id) => {
+      void deleteLayout(id);
+      const remaining = get().layouts.filter((l) => l.id !== id);
+      if (get().currentLayoutId === id) {
+        const next = remaining[0] ?? null;
+        set({
+          layouts: remaining,
+          currentLayoutId: next?.id ?? null,
+          currentPageId: next?.pages[0]?.id ?? null,
+          selectedId: null,
+        });
+      } else {
+        set({ layouts: remaining });
+      }
+    },
   };
+});
+
+// Apply layout sync messages from the bridge. Registered once at module load
+// so the snapshot sent on connect is never missed.
+oscClient.onData((data) => {
+  const store = useEditorStore.getState();
+  if (data.type === 'layouts:snapshot') store.applyRemoteSnapshot(data.layouts ?? []);
+  else if (data.type === 'layouts:update' && data.layout) store.applyRemoteLayout(data.layout);
+  else if (data.type === 'layouts:remove' && data.id) store.removeRemoteLayout(data.id);
 });

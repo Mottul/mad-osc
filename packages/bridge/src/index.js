@@ -15,7 +15,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { WebSocketServer } from 'ws';
 import sirv from 'sirv';
 import osc from 'osc';
@@ -39,6 +39,38 @@ function lanIp() {
 }
 
 const LAN_URL = `http://${lanIp()}:${HTTP_PORT}`;
+
+// --- Shared layout storage (so all devices see the same layouts) -----------
+const DATA_DIR = process.env.DATA_DIR ?? path.resolve(__dirname, '../data');
+const DATA_FILE = path.join(DATA_DIR, 'layouts.json');
+/** @type {Map<string, any>} id -> layout */
+const layouts = new Map();
+
+function loadLayouts() {
+  try {
+    const arr = JSON.parse(readFileSync(DATA_FILE, 'utf8'));
+    if (Array.isArray(arr)) for (const l of arr) if (l?.id) layouts.set(l.id, l);
+    console.log(`[layouts] loaded ${layouts.size} from ${DATA_FILE}`);
+  } catch {
+    /* no file yet */
+  }
+}
+
+let saveTimer = null;
+function persistLayouts() {
+  if (saveTimer) return;
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    try {
+      mkdirSync(DATA_DIR, { recursive: true });
+      writeFileSync(DATA_FILE, JSON.stringify([...layouts.values()], null, 2));
+    } catch (err) {
+      console.error('[layouts] save failed:', err.message);
+    }
+  }, 200);
+}
+
+loadLayouts();
 
 // --- Static PWA server -----------------------------------------------------
 const distDir = path.resolve(__dirname, '../../app/dist');
@@ -84,10 +116,10 @@ udp.on('ready', () => {
 const wss = new WebSocketServer({ server, path: '/ws' });
 const clients = new Set();
 
-function broadcast(obj) {
+function broadcast(obj, except) {
   const data = JSON.stringify(obj);
   for (const ws of clients) {
-    if (ws.readyState === ws.OPEN) ws.send(data);
+    if (ws !== except && ws.readyState === ws.OPEN) ws.send(data);
   }
 }
 
@@ -107,6 +139,8 @@ wss.on('connection', (ws) => {
       lanUrl: LAN_URL,
     })
   );
+  // Send the current shared layouts so this device adopts them.
+  ws.send(JSON.stringify({ type: 'layouts:snapshot', layouts: [...layouts.values()] }));
 
   ws.on('message', (raw) => {
     let parsed;
@@ -115,12 +149,32 @@ wss.on('connection', (ws) => {
     } catch {
       return; // ignore non-JSON
     }
-    if (parsed.type === 'osc' && typeof parsed.address === 'string') {
-      try {
-        udp.send({ address: parsed.address, args: parsed.args ?? [] });
-      } catch (err) {
-        console.error('[osc] send failed:', err.message);
-      }
+    switch (parsed.type) {
+      case 'osc':
+        if (typeof parsed.address === 'string') {
+          try {
+            udp.send({ address: parsed.address, args: parsed.args ?? [] });
+          } catch (err) {
+            console.error('[osc] send failed:', err.message);
+          }
+        }
+        break;
+      case 'layouts:save':
+        if (parsed.layout?.id) {
+          layouts.set(parsed.layout.id, parsed.layout);
+          persistLayouts();
+          broadcast({ type: 'layouts:update', layout: parsed.layout }, ws);
+        }
+        break;
+      case 'layouts:delete':
+        if (parsed.id && layouts.delete(parsed.id)) {
+          persistLayouts();
+          broadcast({ type: 'layouts:remove', id: parsed.id }, ws);
+        }
+        break;
+      case 'layouts:get':
+        ws.send(JSON.stringify({ type: 'layouts:snapshot', layouts: [...layouts.values()] }));
+        break;
     }
   });
 

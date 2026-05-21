@@ -64,7 +64,11 @@ z. B. `/surfaces/Quad 1/opacity` oder `/surfaces/Quad 1/visible`.
   für **Laptop** (breit) und **Handy** (schmal) – einfach das Fenster
   verkleinern bzw. am Handy öffnen und dort umsortieren.
 - **Layouts:** mehrere Layouts und mehrere Seiten pro Layout. **Export/Import**
-  als JSON-Datei; gespeichert wird lokal im Browser (IndexedDB).
+  als JSON-Datei. Layouts werden zentral in der Bridge gespeichert und **live
+  zwischen allen verbundenen Geräten synchronisiert** – am Laptop gebaut,
+  erscheint es sofort am Handy. Lokal cached die App in IndexedDB, sodass sie
+  auch offline funktioniert. Die Bridge legt die Layouts unter
+  `packages/bridge/data/layouts.json` ab (per `DATA_DIR` änderbar).
 
 ## Konfiguration (Umgebungsvariablen)
 
@@ -74,6 +78,7 @@ z. B. `/surfaces/Quad 1/opacity` oder `/surfaces/Quad 1/visible`.
 | `MADMAPPER_HOST` | `127.0.0.1` | Host, auf dem MadMapper läuft               |
 | `OSC_OUT_PORT`   | `8000`      | MadMapper-Input-Port (wir senden dorthin)   |
 | `OSC_IN_PORT`    | `9000`      | MadMapper-Feedback-Port (wir hören dort)    |
+| `DATA_DIR`       | `packages/bridge/data` | Ablage der geteilten Layouts     |
 
 ## Entwicklung
 

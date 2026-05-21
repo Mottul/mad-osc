@@ -14,6 +14,7 @@ class OscClient {
   private shouldReconnect = false;
   private lanUrl: string | null = null;
   private helloListeners = new Set<(lanUrl: string) => void>();
+  private dataListeners = new Set<(data: any) => void>();
 
   connect(host: string, port: number): void {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -49,6 +50,7 @@ class OscClient {
           this.lanUrl = data.lanUrl;
           this.helloListeners.forEach((l) => l(data.lanUrl));
         }
+        this.dataListeners.forEach((l) => l(data));
       } catch {
         /* ignore */
       }
@@ -75,6 +77,20 @@ class OscClient {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'osc', address, args }));
     }
+  }
+
+  // Send an arbitrary typed message (e.g. layout sync) to the bridge.
+  sendMessage(obj: unknown): boolean {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(obj));
+      return true;
+    }
+    return false;
+  }
+
+  onData(l: (data: any) => void): () => void {
+    this.dataListeners.add(l);
+    return () => this.dataListeners.delete(l);
   }
 
   private setStatus(status: Status): void {
