@@ -14,6 +14,7 @@ export function Toolbar() {
     newLayout,
     selectLayout,
     renameLayout,
+    removeCurrentLayout,
     addPage,
     selectPage,
     importLayout,
@@ -75,6 +76,19 @@ export function Toolbar() {
         }}
       >
         Rename
+      </button>
+      <button
+        className="rounded border border-edge bg-surface px-2.5 py-1.5 text-xs text-zinc-300 hover:border-danger hover:text-danger"
+        onClick={() => {
+          if (
+            layout &&
+            confirm(`Delete layout "${layout.name}"? This removes it on all devices.`)
+          ) {
+            removeCurrentLayout();
+          }
+        }}
+      >
+        Delete
       </button>
 
       <div className="mx-1 h-5 w-px bg-edge" />
