@@ -39,11 +39,20 @@ export function Inspector() {
       </h2>
 
       <Field label="Label">
-        <input
-          className={inputCls}
-          value={widget.label}
-          onChange={(e) => patch({ label: e.target.value })}
-        />
+        {widget.type === 'label' ? (
+          <textarea
+            className={`${inputCls} h-20 resize-y`}
+            value={widget.label}
+            placeholder="Multi-line text is supported"
+            onChange={(e) => patch({ label: e.target.value })}
+          />
+        ) : (
+          <input
+            className={inputCls}
+            value={widget.label}
+            onChange={(e) => patch({ label: e.target.value })}
+          />
+        )}
       </Field>
 
       {widget.type !== 'label' && (
@@ -76,6 +85,19 @@ export function Inspector() {
             />
           </Field>
         </div>
+      )}
+
+      {(widget.type === 'fader' || widget.type === 'xypad') && (
+        <Field label="Sensitivity (higher = finer)">
+          <input
+            type="number"
+            min={0.25}
+            step={0.25}
+            className={inputCls}
+            value={widget.sensitivity ?? 1}
+            onChange={(e) => patch({ sensitivity: Number(e.target.value) })}
+          />
+        </Field>
       )}
 
       {widget.type === 'fader' && (

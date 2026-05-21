@@ -43,6 +43,9 @@ export interface Widget {
   orientation?: 'vertical' | 'horizontal';
   // Button behaviour
   mode?: 'momentary' | 'toggle';
+  // Drag sensitivity for fader/xypad (1 = full range over the control length,
+  // higher = more travel needed per value change). Defaults to 1.
+  sensitivity?: number;
 }
 
 export interface Page {

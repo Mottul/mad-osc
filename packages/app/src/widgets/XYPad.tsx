@@ -5,26 +5,27 @@ import { scale, sendFloats } from './oscSend';
 export function XYPad({ widget, interactive }: { widget: Widget; interactive: boolean }) {
   const [pos, setPos] = useState({ x: 0.5, y: 0.5 });
   const ref = useRef<HTMLDivElement>(null);
+  const start = useRef({ px: 0, py: 0, x: 0.5, y: 0.5 });
   const color = widget.style?.color ?? '#2d9cdb';
-
-  const update = (clientX: number, clientY: number) => {
-    const el = ref.current;
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    const x = Math.min(1, Math.max(0, (clientX - r.left) / r.width));
-    const y = Math.min(1, Math.max(0, 1 - (clientY - r.top) / r.height));
-    setPos({ x, y });
-    sendFloats(widget.osc.address, [scale(widget, x), scale(widget, y)]);
-  };
+  const sensitivity = widget.sensitivity && widget.sensitivity > 0 ? widget.sensitivity : 1;
 
   const onDown = (e: React.PointerEvent) => {
     if (!interactive) return;
     e.currentTarget.setPointerCapture(e.pointerId);
-    update(e.clientX, e.clientY);
+    start.current = { px: e.clientX, py: e.clientY, x: pos.x, y: pos.y };
   };
+
   const onMove = (e: React.PointerEvent) => {
     if (!interactive || e.buttons === 0) return;
-    update(e.clientX, e.clientY);
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const dx = (e.clientX - start.current.px) / (r.width * sensitivity);
+    const dy = (start.current.py - e.clientY) / (r.height * sensitivity);
+    const x = Math.min(1, Math.max(0, start.current.x + dx));
+    const y = Math.min(1, Math.max(0, start.current.y + dy));
+    setPos({ x, y });
+    sendFloats(widget.osc.address, [scale(widget, x), scale(widget, y)]);
   };
 
   return (

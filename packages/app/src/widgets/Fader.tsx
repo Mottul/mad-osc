@@ -5,29 +5,30 @@ import { scale, sendFloat } from './oscSend';
 export function Fader({ widget, interactive }: { widget: Widget; interactive: boolean }) {
   const [value, setValue] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
+  // Relative-drag anchors captured on pointer down.
+  const start = useRef({ x: 0, y: 0, value: 0 });
   const horizontal = widget.orientation === 'horizontal';
   const color = widget.style?.color ?? '#3ddc97';
-
-  const update = (clientX: number, clientY: number) => {
-    const el = ref.current;
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    const norm = horizontal
-      ? (clientX - r.left) / r.width
-      : 1 - (clientY - r.top) / r.height;
-    const clamped = Math.min(1, Math.max(0, norm));
-    setValue(clamped);
-    sendFloat(widget, clamped);
-  };
+  const sensitivity = widget.sensitivity && widget.sensitivity > 0 ? widget.sensitivity : 1;
 
   const onDown = (e: React.PointerEvent) => {
     if (!interactive) return;
     e.currentTarget.setPointerCapture(e.pointerId);
-    update(e.clientX, e.clientY);
+    start.current = { x: e.clientX, y: e.clientY, value };
   };
+
   const onMove = (e: React.PointerEvent) => {
     if (!interactive || e.buttons === 0) return;
-    update(e.clientX, e.clientY);
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    // Move relative to the touch point; full control length == full range.
+    const deltaPx = horizontal ? e.clientX - start.current.x : start.current.y - e.clientY;
+    const span = horizontal ? r.width : r.height;
+    const delta = deltaPx / (span * sensitivity);
+    const next = Math.min(1, Math.max(0, start.current.value + delta));
+    setValue(next);
+    sendFloat(widget, next);
   };
 
   return (
