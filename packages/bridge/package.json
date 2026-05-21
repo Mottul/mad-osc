@@ -1,0 +1,17 @@
+{
+  "name": "@mad-osc/bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "mad-osc-bridge": "src/index.js"
+  },
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "osc": "^2.4.5",
+    "sirv": "^3.0.0",
+    "ws": "^8.18.0"
+  }
+}

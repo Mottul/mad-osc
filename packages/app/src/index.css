@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: #0c0f14;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* react-grid-layout placeholder while dragging */
+.react-grid-item.react-grid-placeholder {
+  background: #3ddc97 !important;
+  opacity: 0.18;
+  border-radius: 6px;
+}
+
+.react-grid-item > .react-resizable-handle::after {
+  border-right-color: #3ddc97;
+  border-bottom-color: #3ddc97;
+}
+
+/* make the colorful picker fill its widget cell */
+.madosc-color,
+.madosc-color .react-colorful {
+  width: 100%;
+  height: 100%;
+}

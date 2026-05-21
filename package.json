@@ -1,0 +1,19 @@
+{
+  "name": "mad-osc",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n app,bridge -c cyan,magenta \"npm:dev:app\" \"npm:dev:bridge\"",
+    "dev:app": "npm -w @mad-osc/app run dev",
+    "dev:bridge": "npm -w @mad-osc/bridge run start",
+    "build": "npm -w @mad-osc/app run build",
+    "start": "npm run build && npm -w @mad-osc/bridge run start"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
