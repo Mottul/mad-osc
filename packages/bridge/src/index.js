@@ -12,12 +12,14 @@
 //   OSC_IN_PORT    MadMapper OSC feedback port (we listen)     (default 9000)
 
 import http from 'node:http';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
 import { WebSocketServer } from 'ws';
 import sirv from 'sirv';
 import osc from 'osc';
+import qrcode from 'qrcode-terminal';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -25,6 +27,18 @@ const HTTP_PORT = Number(process.env.HTTP_PORT ?? 8080);
 const MADMAPPER_HOST = process.env.MADMAPPER_HOST ?? '127.0.0.1';
 const OSC_OUT_PORT = Number(process.env.OSC_OUT_PORT ?? 8000);
 const OSC_IN_PORT = Number(process.env.OSC_IN_PORT ?? 9000);
+
+// First non-internal IPv4 address, so phones on the same Wi-Fi can reach us.
+function lanIp() {
+  for (const ifaces of Object.values(os.networkInterfaces())) {
+    for (const ni of ifaces ?? []) {
+      if (ni.family === 'IPv4' && !ni.internal) return ni.address;
+    }
+  }
+  return 'localhost';
+}
+
+const LAN_URL = `http://${lanIp()}:${HTTP_PORT}`;
 
 // --- Static PWA server -----------------------------------------------------
 const distDir = path.resolve(__dirname, '../../app/dist');
@@ -90,6 +104,7 @@ wss.on('connection', (ws) => {
       type: 'hello',
       target: { host: MADMAPPER_HOST, port: OSC_OUT_PORT },
       feedbackPort: OSC_IN_PORT,
+      lanUrl: LAN_URL,
     })
   );
 
@@ -117,6 +132,12 @@ wss.on('connection', (ws) => {
 
 udp.open();
 server.listen(HTTP_PORT, () => {
-  console.log(`[http] PWA + WebSocket on http://localhost:${HTTP_PORT}  (ws: /ws)`);
-  if (!hasBuild) console.log('[http] (serving placeholder until PWA is built)');
+  console.log('');
+  console.log('  mad-osc bridge is running.');
+  console.log(`  Laptop : http://localhost:${HTTP_PORT}`);
+  console.log(`  Phone  : ${LAN_URL}   (scan the QR below)`);
+  console.log('');
+  qrcode.generate(LAN_URL, { small: true });
+  console.log('');
+  if (!hasBuild) console.log('  (no PWA build yet — run `npm run build`; in dev use the Vite URL)');
 });

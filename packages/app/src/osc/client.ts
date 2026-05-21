@@ -12,6 +12,8 @@ class OscClient {
   private messageListeners = new Set<MessageListener>();
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private shouldReconnect = false;
+  private lanUrl: string | null = null;
+  private helloListeners = new Set<(lanUrl: string) => void>();
 
   connect(host: string, port: number): void {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -43,6 +45,9 @@ class OscClient {
         const data = JSON.parse(ev.data);
         if (data.type === 'osc') {
           this.messageListeners.forEach((l) => l(data.address, data.args ?? []));
+        } else if (data.type === 'hello' && data.lanUrl) {
+          this.lanUrl = data.lanUrl;
+          this.helloListeners.forEach((l) => l(data.lanUrl));
         }
       } catch {
         /* ignore */
@@ -89,6 +94,16 @@ class OscClient {
   onMessage(l: MessageListener): () => void {
     this.messageListeners.add(l);
     return () => this.messageListeners.delete(l);
+  }
+
+  getLanUrl(): string | null {
+    return this.lanUrl;
+  }
+
+  onHello(l: (lanUrl: string) => void): () => void {
+    this.helloListeners.add(l);
+    if (this.lanUrl) l(this.lanUrl);
+    return () => this.helloListeners.delete(l);
   }
 }
 

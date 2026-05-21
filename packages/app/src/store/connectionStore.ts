@@ -17,6 +17,7 @@ function loadConfig(): ConnectionConfig {
 interface ConnectionState {
   config: ConnectionConfig;
   status: 'disconnected' | 'connecting' | 'connected';
+  lanUrl: string | null;
   setConfig: (config: ConnectionConfig) => void;
   connect: () => void;
   disconnect: () => void;
@@ -24,9 +25,11 @@ interface ConnectionState {
 
 export const useConnectionStore = create<ConnectionState>((set, get) => {
   oscClient.onStatus((status) => set({ status }));
+  oscClient.onHello((lanUrl) => set({ lanUrl }));
   return {
     config: loadConfig(),
     status: 'disconnected',
+    lanUrl: null,
     setConfig: (config) => {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
       set({ config });

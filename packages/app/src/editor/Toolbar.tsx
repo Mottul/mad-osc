@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { useEditorStore } from '../store/editorStore';
 import { ConnectionBar } from './ConnectionBar';
+import { QrButton } from './QrButton';
 import type { Layout } from '../types';
 
 export function Toolbar() {
@@ -130,6 +131,7 @@ export function Toolbar() {
             Run
           </button>
         </div>
+        <QrButton />
         <ConnectionBar />
       </div>
     </header>
